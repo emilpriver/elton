@@ -6,8 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+actix = "0.13.1"
+actix-web = "4.4.0"
 anyhow = "1.0.75"
-axum = "0.6.20"
 rand = { version = "0.8.5", features = ["serde", "small_rng"] }
 serde = { version = "1.0.188", features = ["derive"] }
 sqlx = { version = "0.7.1", features = ["sqlx-sqlite", "runtime-tokio", "sqlite", "chrono"] }

@@ -1,31 +1,29 @@
-use axum::{
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
-    Extension, Json, Router,
-};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Sqlite, SqlitePool};
+use sqlx::SqlitePool;
 
 mod database;
 
-#[tokio::main]
-async fn main() {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    let (s, r) = async_channel::unbounded();
+
     let connection = match database::setup().await {
         Ok(c) => c,
         Err(err) => panic!("failed to setup database: {:?}", err),
     };
-    // build our application with a route
-    let app = Router::new()
-        .layer(Extension(connection))
-        .route("/", post(create_test))
-        .route("/", post(get_test));
 
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    HttpServer::new(move || {
+        App::new()
+            .route("/", web::post().to(create_test))
+            .route("/:id", web::post().to(get_test))
+            .app_data(web::Data::new(connection.clone()))
+            .app_data(web::Data::new(tx))
+    })
+    .bind(("0.0.0.0", 3000))?
+    .run()
+    .await
 }
 
 #[derive(Deserialize)]
@@ -45,39 +43,38 @@ struct Test {
 }
 
 async fn create_test(
-    pool: Extension<SqlitePool>,
-    Json(payload): Json<CreateTest>,
-) -> (StatusCode, Json<Test>) {
+    pool: web::Data<SqlitePool>,
+    payload: web::Json<CreateTest>,
+) -> impl Responder {
     let mut rng = rand::thread_rng();
     let random_number: u32 = rng.gen_range(100_000..1_000_000);
     let id = random_number.to_string();
 
-    sqlx::query(
-        "INSERT INTO tests(id, url, method, content_type, body) VALUES($1, $2, $3, $4, $5)",
+    let test: Test = sqlx::query_as(
+        "INSERT INTO tests(id, url, method, content_type, body) VALUES($1, $2, $3, $4, $5) RETURNING id, method, url",
     )
-    .bind(id)
-    .bind(payload.url)
-    .bind(payload.method)
-    .bind(payload.content_type)
-    .bind(payload.body)
-    .execute(&pool)
-    .await;
+    .bind(id.clone())
+    .bind(payload.url.clone())
+    .bind(payload.method.clone())
+    .bind(payload.content_type.clone())
+    .bind(payload.body.clone())
+    .fetch_one(&mut pool)
+    .await
+    .unwrap();
 
-    let t = Test {
-        id,
-        method: payload.method,
-        url: payload.url,
-    };
+    for c in 0..payload.connections {
+        tokio::spawn(async move || {})
+    }
 
-    (StatusCode::CREATED, Json(t))
+    HttpResponse::Created().json(test)
 }
 
-async fn get_test() -> (StatusCode, Json<Test>) {
+async fn get_test() -> impl Responder {
     let p = Test {
         id: String::from(""),
         method: String::from(""),
         url: String::from(""),
     };
 
-    (StatusCode::CREATED, Json(p))
+    HttpResponse::Created().json(p)
 }
