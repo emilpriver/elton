@@ -2,13 +2,10 @@ use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-
 mod database;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let (s, r) = async_channel::unbounded();
-
     let connection = match database::setup().await {
         Ok(c) => c,
         Err(err) => panic!("failed to setup database: {:?}", err),
@@ -19,7 +16,6 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::post().to(create_test))
             .route("/:id", web::post().to(get_test))
             .app_data(web::Data::new(connection.clone()))
-            .app_data(web::Data::new(tx))
     })
     .bind(("0.0.0.0", 3000))?
     .run()
