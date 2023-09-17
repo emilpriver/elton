@@ -17,7 +17,6 @@ pub struct Result {
 
 /*
 * TODO:
-* - Logging
 * - Start_at. Be able to tell when to start the task so each container start's at the same time
 * - Optimization
 */
