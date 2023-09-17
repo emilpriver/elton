@@ -18,8 +18,7 @@ pub enum HttpMethods {
 #[derive(Deserialize, Serialize, Clone)]
 pub struct CreateTest {
     pub method: HttpMethods,
-    pub connections: u64,
-    pub threads: u64,
+    pub tasks: u64,
     pub seconds: u64,
     pub start_at: String,
     pub url: String,

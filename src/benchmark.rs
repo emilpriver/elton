@@ -22,16 +22,15 @@ pub struct Result {
 */
 pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
     log::info!(
-        "Starting benchmark using {} threads with {} connections for {} seconds",
-        test.threads,
-        test.connections,
+        "Starting benchmark using {} tasks for {} seconds",
+        test.tasks,
         test.seconds
     );
 
     let mut results: Vec<Result> = vec![];
-    let (tx, mut rx) = mpsc::channel(test.connections as usize);
+    let (tx, mut rx) = mpsc::channel(test.tasks as usize);
 
-    for thread in 0..test.threads {
+    for thread in 0..test.tasks {
         let tx_clone = tx.clone();
         let cloned_test = test.clone();
 
@@ -116,7 +115,7 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
     while let Some(i) = rx.recv().await {
         results.push(i);
 
-        if results.len() >= (test.threads * test.seconds) as usize {
+        if results.len() >= (test.tasks * test.seconds) as usize {
             break;
         }
     }
