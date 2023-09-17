@@ -45,7 +45,9 @@ pub async fn create_test(
     .await
     .unwrap();
 
-    benchmark::run_benchmark(payload.0);
+    tokio::spawn(async move {
+        benchmark::run_benchmark(payload.clone()).await;
+    });
 
     HttpResponse::Created().json(test)
 }

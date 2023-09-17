@@ -11,6 +11,7 @@ use crate::routes;
 - Report back to main thread the result of test
 */
 
+#[derive(Debug)]
 pub struct Result {
     pub connection_id: u64,
     pub second: u64,
@@ -98,6 +99,7 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
     }
 
     while let Some(i) = rx.recv().await {
+        println!("{:?}", i);
         // TODO: break this
         results.push(i);
     }
