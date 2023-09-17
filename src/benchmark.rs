@@ -1,5 +1,8 @@
 use reqwest::StatusCode;
-use tokio::time::{Duration, Instant};
+use tokio::{
+    sync::mpsc,
+    time::{Duration, Instant},
+};
 
 use crate::routes;
 
@@ -8,18 +11,22 @@ use crate::routes;
 - Report back to main thread the result of test
 */
 
-struct Result {
+pub struct Result {
     pub connection_id: u64,
     pub second: u64,
     pub error_codes: Vec<StatusCode>,
     pub requests: u64,
 }
 
-pub fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
+pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
     let mut results: Vec<Result> = vec![];
+    let connections_usize = test.connections.clone() as usize;
+
+    let (tx, mut rx) = mpsc::channel(connections_usize);
 
     for c in 0..test.connections {
         let thread_test = test.clone();
+        let cloned_tx = tx.clone();
 
         tokio::task::spawn(async move {
             let mut total_result: Vec<Result> = vec![];
@@ -80,9 +87,19 @@ pub fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
             }
 
             for r in total_result {
-                //    results.push(r);
+                match cloned_tx.send(r).await {
+                    Err(err) => {
+                        log::error!("failed to send result to channel: {:?}", err)
+                    }
+                    _ => {} //Ignore if sending to channel was ok
+                }
             }
         });
+    }
+
+    while let Some(i) = rx.recv().await {
+        // TODO: break this
+        results.push(i);
     }
 
     results
