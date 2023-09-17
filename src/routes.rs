@@ -54,18 +54,16 @@ pub async fn create_test(
             .clone()
             .into_iter()
             .map(|x| x.second)
-            .dedup()
+            .unique()
         {
-            let second_result: Vec<benchmark::Result> = benchmark_result
+            let results_per_second: Vec<benchmark::Result> = benchmark_result
                 .clone()
                 .into_iter()
                 .filter(|x| x.second == s)
                 .collect();
 
-            grouped_results.push((s, second_result));
+            grouped_results.push((s, results_per_second));
         }
-
-        println!("{:?}", grouped_results.len());
 
         for (sec, r) in grouped_results {
             let total_requests: i64 = r.clone().into_iter().map(|x| x.requests).sum();
