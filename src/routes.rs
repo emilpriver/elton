@@ -41,7 +41,7 @@ pub async fn create_test(
 ) -> impl Responder {
     let id = Uuid::new_v4().to_string();
 
-    let test: database::TestRow = sqlx::query_as(
+    let test: database::TestRow = match sqlx::query_as(
         "INSERT INTO tests(id, url, method, content_type, body) VALUES($1, $2, $3, $4, $5) RETURNING id, url, method, content_type, status, body, finished_at, created_at",
     )
     .bind(&id)
@@ -51,7 +51,13 @@ pub async fn create_test(
     .bind(&payload.body)
     .fetch_one(pool.get_ref())
     .await
-    .unwrap();
+    {
+        Ok(t) => t,
+        Err(err) => {
+            log::error!("failed to insert test into database: {:?}", err);
+            return HttpResponse::InternalServerError().body("failed to insert test into database, check logs for more information");
+        }
+    };
 
     tokio::task::spawn(async move {
         let benchmark_result = benchmark::run_benchmark(payload.0).await;

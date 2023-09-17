@@ -1,3 +1,5 @@
+use std::intrinsics::breakpoint;
+
 use hyper::{Body, Client, Request, StatusCode};
 use hyper_tls::HttpsConnector;
 use tokio::{
@@ -69,7 +71,15 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
                             body = Body::from(b);
                         }
 
-                        let new_request = req.body(body).unwrap();
+                        let new_request = match req.body(body) {
+                            Ok(nr) => nr,
+                            Err(err) => {
+                                // If we are not able to create the body do we log a request and
+                                // break the loop
+                                log::error!("failed to add body to request: {:?}", err);
+                                break;
+                            }
+                        };
 
                         client.request(new_request).await
                     }
@@ -85,11 +95,10 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
                             }
                         }
                         Err(err) => {
-                            log::error!("failed to send request: {:?}", err);
-
-                            total_result[second]
-                                .error_codes
-                                .push(StatusCode::INTERNAL_SERVER_ERROR);
+                            // We only add a result if we get a response.
+                            // This don't call don't give us a response
+                            // Could mean remote server is down
+                            log::error!("failed to send request: {:?}", err)
                         }
                     }
                 }

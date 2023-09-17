@@ -8,10 +8,15 @@ mod routes;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> std::io::Result<()> {
-    SimpleLogger::new()
+    match SimpleLogger::new()
         .with_level(log::LevelFilter::Info)
         .init()
-        .unwrap();
+    {
+        Err(err) => {
+            println!("failed to setup logging: {:?}", err);
+        }
+        _ => {}
+    }
 
     let connection = match database::setup().await {
         Ok(c) => c,
