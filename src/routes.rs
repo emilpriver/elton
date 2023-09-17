@@ -132,7 +132,7 @@ pub struct TestWithResults {
     body: Option<String>,
     created_at: String,
     finished_at: Option<String>,
-    resuluts: Vec<TestResultsRow>,
+    results: Vec<TestResultsRow>,
 }
 
 #[get("/{test_id}")]
@@ -174,7 +174,7 @@ pub async fn get_test(pool: web::Data<Pool<Sqlite>>, test_id: web::Path<String>)
         body: test.body,
         created_at: test.created_at,
         finished_at: test.finished_at,
-        resuluts: test_results,
+        results: test_results,
     };
 
     HttpResponse::Ok().json(resp)
