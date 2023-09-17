@@ -1,37 +1,47 @@
-use reqwest::StatusCode;
+use hyper::{Body, Client, Request, StatusCode};
+use hyper_tls::HttpsConnector;
 use tokio::{
     sync::mpsc,
     time::{Duration, Instant},
 };
 
-use crate::routes;
+use crate::routes::{self, HttpMethods};
 
 #[derive(Debug, Clone)]
 pub struct Result {
-    pub connection_id: u64,
+    pub thread_id: u64,
     pub second: i64,
     pub error_codes: Vec<StatusCode>,
     pub requests: i64,
 }
 
-// TODO: response logging progres
+/*
+* TODO:
+* - Logging
+* - Start_at. Be able to tell when to start the task so each container start's at the same time
+* - Optimization
+*/
 pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
+    log::info!(
+        "Starting benchmark using {} threads with {} connections for {} seconds",
+        test.threads,
+        test.connections,
+        test.seconds
+    );
+
     let mut results: Vec<Result> = vec![];
-    let connections_usize = test.connections.clone() as usize;
+    let (tx, mut rx) = mpsc::channel(test.connections as usize);
 
-    let (tx, mut rx) = mpsc::channel(connections_usize);
+    for thread in 0..test.threads {
+        let tx_clone = tx.clone();
+        let cloned_test = test.clone();
 
-    for c in 0..test.connections {
-        let thread_test = test.clone();
-        let cloned_tx = tx.clone();
-
-        tokio::task::spawn(async move {
+        tokio::spawn(async move {
             let mut total_result: Vec<Result> = vec![];
 
-            // We need to fill the vec
             for s in 0..test.seconds {
                 total_result.push(Result {
-                    connection_id: c,
+                    thread_id: thread,
                     second: s as i64,
                     error_codes: vec![],
                     requests: 0,
@@ -41,27 +51,28 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
             let total_duration = Duration::new(test.seconds, 0);
             let start_time = Instant::now();
 
+            let connector = HttpsConnector::new();
+            let client = Client::builder().build(connector);
+
             while start_time.elapsed() < total_duration {
                 let second = start_time.elapsed().as_secs() as usize;
 
-                let resp = match thread_test.method.to_uppercase().as_str() {
-                    "GET" => reqwest::get(thread_test.url.clone()).await,
-                    "POST" => {
-                        let client = reqwest::Client::new();
-                        let mut req = client.post(thread_test.url.clone());
-
-                        if let Some(b) = thread_test.body.clone() {
-                            req = req.body(b);
-                        }
-
-                        if let Some(c) = thread_test.content_type.clone() {
+                let resp = match &cloned_test.method {
+                    HttpMethods::GET => client.get(cloned_test.url.clone().parse().unwrap()).await,
+                    HttpMethods::POST => {
+                        let mut req = Request::post(cloned_test.url.clone());
+                        if let Some(c) = &cloned_test.content_type {
                             req = req.header("Content-Type", c);
                         }
 
-                        req.send().await
-                    }
-                    _ => {
-                        panic!("method {} not supported", thread_test.method)
+                        let mut body = Body::empty();
+                        if let Some(b) = cloned_test.body.clone() {
+                            body = Body::from(b);
+                        }
+
+                        let new_request = req.body(body).unwrap();
+
+                        client.request(new_request).await
                     }
                 };
 
@@ -75,16 +86,18 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
                             }
                         }
                         Err(err) => {
-                            if let Some(err_status) = err.status() {
-                                total_result[second].error_codes.push(err_status);
-                            }
+                            log::error!("failed to send request: {:?}", err);
+
+                            total_result[second]
+                                .error_codes
+                                .push(StatusCode::INTERNAL_SERVER_ERROR);
                         }
                     }
                 }
             }
 
             for r in total_result {
-                match cloned_tx.send(r).await {
+                match tx_clone.send(r).await {
                     Err(err) => {
                         log::error!("failed to send result to channel: {:?}", err)
                     }
@@ -97,10 +110,12 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
     while let Some(i) = rx.recv().await {
         results.push(i);
 
-        if results.len() >= (test.connections * test.seconds) as usize {
+        if results.len() >= (test.threads * test.seconds) as usize {
             break;
         }
     }
+
+    log::info!("finished benchmark");
 
     results
 }

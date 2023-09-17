@@ -2,8 +2,6 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::{migrate, Pool, Sqlite};
 
-// TODO: add structs for all tables
-
 pub async fn setup() -> Result<Pool<Sqlite>> {
     let pool = Pool::<Sqlite>::connect("sqlite::memory:").await?;
 

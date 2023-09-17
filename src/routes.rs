@@ -8,12 +8,20 @@ use crate::benchmark;
 use crate::benchmark::Result;
 use crate::database::{self, TestResultsRow};
 
-#[derive(Deserialize, Clone)]
+#[derive(Clone, Copy, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "method", rename_all = "lowercase")]
+pub enum HttpMethods {
+    POST,
+    GET,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
 pub struct CreateTest {
-    pub method: String,
+    pub method: HttpMethods,
     pub connections: u64,
+    pub threads: u64,
     pub seconds: u64,
-    pub start_at: String, // TODO: change this to chrono timestamp
+    pub start_at: String,
     pub url: String,
     pub content_type: Option<String>,
     pub body: Option<String>,
@@ -93,7 +101,7 @@ pub async fn create_test(
         }
 
         match sqlx::query(
-            "UPDATE tests SET status = 'FINISHED', finished_at = CURRENT_TIMESTAMP WHERE id = $1", // TODO: this don't update
+            "UPDATE tests SET status = 'FINISHED', finished_at = CURRENT_TIMESTAMP WHERE id = $1",
         )
         .bind(&id)
         .execute(pool.get_ref())
