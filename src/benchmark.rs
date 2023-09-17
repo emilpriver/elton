@@ -6,14 +6,15 @@ use tokio::{
 
 use crate::routes;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Result {
     pub connection_id: u64,
-    pub second: u64,
+    pub second: i64,
     pub error_codes: Vec<StatusCode>,
-    pub requests: u64,
+    pub requests: i64,
 }
 
+// TODO: response logging progres
 pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
     let mut results: Vec<Result> = vec![];
     let connections_usize = test.connections.clone() as usize;
@@ -31,7 +32,7 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
             for s in 0..test.seconds {
                 total_result.push(Result {
                     connection_id: c,
-                    second: s,
+                    second: s as i64,
                     error_codes: vec![],
                     requests: 0,
                 })

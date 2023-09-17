@@ -1,9 +1,12 @@
-use actix_web::{web, HttpResponse, Responder};
-use rand::{self, Rng};
+use actix_web::{get, post, web, HttpResponse, Responder};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
+use uuid::Uuid;
 
 use crate::benchmark;
+use crate::benchmark::Result;
+use crate::database::{self, TestResultsRow};
 
 #[derive(Deserialize, Clone)]
 pub struct CreateTest {
@@ -23,43 +26,145 @@ pub struct Test {
     pub url: String,
 }
 
+#[post("/")]
 pub async fn create_test(
     pool: web::Data<Pool<Sqlite>>,
     payload: web::Json<CreateTest>,
 ) -> impl Responder {
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(100_000..1_000_000);
-    let id = random_number.to_string();
+    let id = Uuid::new_v4().to_string();
 
-    let db_pool = pool.get_ref();
-
-    let test: Test = sqlx::query_as(
-        "INSERT INTO tests(id, url, method, content_type, body) VALUES($1, $2, $3, $4, $5) RETURNING id, method, url",
+    let test: database::TestRow = sqlx::query_as(
+        "INSERT INTO tests(id, url, method, content_type, body) VALUES($1, $2, $3, $4, $5) RETURNING id, url, method, content_type, status, body, finished_at, created_at",
     )
-    .bind(id.clone())
-    .bind(payload.url.clone())
-    .bind(payload.method.clone())
-    .bind(payload.content_type.clone())
-    .bind(payload.body.clone())
-    .fetch_one(db_pool)
+    .bind(&id)
+    .bind(&payload.url)
+    .bind(&payload.method)
+    .bind(&payload.content_type)
+    .bind(&payload.body)
+    .fetch_one(pool.get_ref())
     .await
     .unwrap();
 
-    tokio::spawn(async move {
-        let result = benchmark::run_benchmark(payload.clone()).await;
-        //TODO: store result in db
-        println!("{:?}", result);
+    tokio::task::spawn(async move {
+        let benchmark_result = benchmark::run_benchmark(payload.0).await;
+
+        let mut grouped_results: Vec<(i64, Vec<Result>)> = vec![];
+
+        for s in benchmark_result
+            .clone()
+            .into_iter()
+            .map(|x| x.second)
+            .dedup()
+        {
+            let second_result: Vec<benchmark::Result> = benchmark_result
+                .clone()
+                .into_iter()
+                .filter(|x| x.second == s)
+                .collect();
+
+            grouped_results.push((s, second_result));
+        }
+
+        println!("{:?}", grouped_results.len());
+
+        for (sec, r) in grouped_results {
+            let total_requests: i64 = r.clone().into_iter().map(|x| x.requests).sum();
+            let error_codes: Vec<String> = r
+                .into_iter()
+                .flat_map(|x| x.error_codes)
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>();
+
+            let test_id = Uuid::new_v4();
+
+            match sqlx::query(
+                "INSERT INTO test_results(id, test_id, second, requests, error_codes) VALUES($1, $2, $3, $4, $5)",
+            )
+            .bind(test_id.to_string())
+            .bind(&id)
+            .bind(sec)
+            .bind(total_requests)
+            .bind(error_codes.join(","))
+            .execute(pool.get_ref())
+            .await {
+                Err(err) => {
+                        log::error!("error inserting test_results: {:?}", err)
+                    }
+                _ => {},
+            }
+        }
+
+        match sqlx::query(
+            "UPDATE tests SET status = 'FINISHED', finished_at = CURRENT_TIMESTAMP WHERE id = $1", // TODO: this don't update
+        )
+        .bind(&id)
+        .execute(pool.get_ref())
+        .await
+        {
+            Err(err) => {
+                log::error!("error inserting test_results: {:?}", err)
+            }
+            _ => {}
+        }
     });
 
     HttpResponse::Created().json(test)
 }
 
-pub async fn get_test(pool: web::Data<Pool<Sqlite>>) -> impl Responder {
-    let p = Test {
-        id: String::from(""),
-        method: String::from(""),
-        url: String::from(""),
+#[derive(Serialize, Deserialize, Clone, sqlx::FromRow)]
+pub struct TestWithResults {
+    id: String,
+    url: String,
+    method: String,
+    content_type: String,
+    status: String,
+    body: Option<String>,
+    created_at: String,
+    finished_at: Option<String>,
+    resuluts: Vec<TestResultsRow>,
+}
+
+#[get("/{test_id}")]
+pub async fn get_test(pool: web::Data<Pool<Sqlite>>, test_id: web::Path<String>) -> impl Responder {
+    let test: database::TestRow  = match sqlx::query_as("SELECT id, url, method, content_type, status, body, finished_at, created_at FROM tests WHERE id = $1")
+        .bind(&test_id.as_str())
+        .fetch_one(pool.get_ref())
+        .await
+        {
+        Ok(r) => r,
+        Err(err) => {
+            println!("error fetching test: {:?}", err);
+
+            return HttpResponse::NotFound().body("not found")
+        }
     };
 
-    HttpResponse::Created().json(p)
+    let test_results: Vec<database::TestResultsRow> = match sqlx::query_as(
+        "SELECT id, test_id, second, requests, error_codes FROM test_results WHERE test_id = $1",
+    )
+    .bind(&test_id.as_str())
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(r) => r,
+        Err(err) => {
+            println!("error fetching test: {:?}", err);
+
+            return HttpResponse::NotFound().body("not found");
+        }
+    };
+
+    let resp = TestWithResults {
+        id: test.id,
+        url: test.url,
+        method: test.method,
+        content_type: test.content_type,
+        status: test.status,
+        body: test.body,
+        created_at: test.created_at,
+        finished_at: test.finished_at,
+        resuluts: test_results,
+    };
+
+    HttpResponse::Ok().json(resp)
 }

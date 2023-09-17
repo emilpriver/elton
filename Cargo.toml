@@ -9,9 +9,11 @@ edition = "2021"
 actix = "0.13.1"
 actix-web = "4.4.0"
 anyhow = "1.0.75"
+itertools = "0.11.0"
 log = { version = "0.4.20", features = ["serde"] }
 rand = { version = "0.8.5", features = ["serde", "small_rng"] }
 reqwest = { version = "0.11.20", features = ["serde_json", "json", "tokio-util"] }
 serde = { version = "1.0.188", features = ["derive"] }
 sqlx = { version = "0.7.1", features = ["sqlx-sqlite", "runtime-tokio", "sqlite", "chrono"] }
 tokio = { version = "1.32.0", features = ["full"] }
+uuid = { version = "1.4.1", features = ["serde", "v4"] }

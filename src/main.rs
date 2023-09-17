@@ -1,4 +1,5 @@
 use actix_web::{web, App, HttpServer};
+use routes::{create_test, get_test};
 
 mod benchmark;
 mod database;
@@ -13,8 +14,8 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .route("/", web::post().to(routes::create_test))
-            .route("/:id", web::post().to(routes::get_test))
+            .service(get_test)
+            .service(create_test)
             .app_data(web::Data::new(connection.clone()))
     })
     .bind(("0.0.0.0", 3000))?
