@@ -1,4 +1,4 @@
-use hyper::{Body, Client, Request, StatusCode};
+use hyper::{Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use tokio::{
     sync::mpsc,
@@ -11,7 +11,7 @@ use crate::routes::{self, HttpMethods};
 pub struct Result {
     pub thread_id: u64,
     pub second: i64,
-    pub error_codes: Vec<StatusCode>,
+    pub error_codes: Vec<String>,
     pub requests: i64,
 }
 
@@ -88,10 +88,13 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
                     match resp {
                         Ok(res) => {
                             if !res.status().is_success() {
-                                total_result[second].error_codes.push(res.status());
+                                total_result[second]
+                                    .error_codes
+                                    .push(res.status().to_string());
                             }
                         }
                         Err(err) => {
+                            total_result[second].error_codes.push(err.to_string());
                             // We only add a result if we get a response.
                             // This don't call don't give us a response
                             // Could mean remote server is down

@@ -1,9 +1,13 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::{migrate, Pool, Sqlite};
+use sqlx::{migrate, sqlite::SqliteConnectOptions, Pool, Sqlite};
 
 pub async fn setup() -> Result<Pool<Sqlite>> {
-    let pool = Pool::<Sqlite>::connect("sqlite::memory:").await?;
+    let options = SqliteConnectOptions::new()
+        .filename("elton.sqlite")
+        .create_if_missing(true);
+
+    let pool = Pool::<Sqlite>::connect_with(options).await?;
 
     migrate!("./migrations").run(&pool).await?;
 
