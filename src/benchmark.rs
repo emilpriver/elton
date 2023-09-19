@@ -1,8 +1,10 @@
+use chrono::Utc;
 use hyper::{Body, Client, Request};
 use hyper_tls::HttpsConnector;
+use std::time::Duration;
 use tokio::{
     sync::mpsc,
-    time::{Duration, Instant},
+    time::{sleep, Instant},
 };
 
 use crate::routes::{self, HttpMethods};
@@ -15,17 +17,24 @@ pub struct Result {
     pub requests: i64,
 }
 
-/*
-* TODO:
-* - Start_at. Be able to tell when to start the task so each container start's at the same time
-* - Optimization
-*/
 pub async fn run_benchmark(test: routes::CreateTest) -> Vec<Result> {
     log::info!(
         "Starting benchmark using {} tasks for {} seconds",
         test.tasks,
         test.seconds
     );
+
+    // if we have a start_at timestamp do we wait until start_at is elapsed and then run the
+    // benchmark
+    if let Some(start_at) = test.start_at {
+        let time_now = Utc::now();
+        let time_until_start_at = start_at.and_utc() - time_now;
+
+        sleep(Duration::from_micros(
+            time_until_start_at.num_microseconds().unwrap_or(0) as u64,
+        ))
+        .await;
+    }
 
     let mut results: Vec<Result> = vec![];
     let (tx, mut rx) = mpsc::channel(test.tasks as usize);

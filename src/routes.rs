@@ -1,4 +1,5 @@
 use actix_web::{get, post, web, HttpResponse, Responder};
+use chrono::NaiveDateTime;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
@@ -20,7 +21,7 @@ pub struct CreateTest {
     pub method: HttpMethods,
     pub tasks: u64,
     pub seconds: u64,
-    pub start_at: String,
+    pub start_at: Option<NaiveDateTime>,
     pub url: String,
     pub content_type: Option<String>,
     pub body: Option<String>,
