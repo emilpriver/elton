@@ -1,3 +1,4 @@
+use anyhow::Result;
 use chrono::Utc;
 use hyper::{Body, Client, Request};
 use hyper_tls::HttpsConnector;
@@ -22,7 +23,7 @@ pub struct Test {
 }
 
 #[derive(Debug, Clone)]
-pub struct Result {
+pub struct TestResult {
     pub second: i64,
     pub error_codes: Vec<String>,
     pub response_codes: Vec<u16>,
@@ -30,7 +31,7 @@ pub struct Result {
     pub avg_response_time: f64,
 }
 
-pub async fn run_benchmark(test: routes::CreateTest) -> Vec<(i64, Vec<Result>)> {
+pub async fn run_benchmark(test: routes::CreateTest) -> Result<Vec<(i64, Vec<TestResult>)>> {
     log::info!(
         "Starting benchmark using {} tasks for {} seconds",
         test.tasks,
@@ -49,7 +50,7 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<(i64, Vec<Result>)> 
         .await;
     }
 
-    let mut results: Vec<Result> = vec![];
+    let mut results: Vec<TestResult> = vec![];
     let (tx, mut rx) = mpsc::channel(test.tasks as usize);
 
     // Spawn a tokio task depending on amount of tasks we defined
@@ -118,7 +119,7 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<(i64, Vec<Result>)> 
                 thread_results.push(result);
             }
 
-            let mut grouped_results: Vec<Result> = vec![];
+            let mut grouped_results: Vec<TestResult> = vec![];
             for s in 0..test.seconds {
                 let test_this_second: Vec<&Test> = thread_results
                     .iter()
@@ -142,7 +143,7 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<(i64, Vec<Result>)> 
                     .map(|x| x.response_code)
                     .collect_vec();
 
-                grouped_results.push(Result {
+                grouped_results.push(TestResult {
                     second: s as i64,
                     error_codes,
                     requests: test_this_second.len() as i64,
@@ -170,10 +171,10 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<(i64, Vec<Result>)> 
         }
     }
 
-    let mut grouped_results: Vec<(i64, Vec<Result>)> = vec![];
+    let mut grouped_results: Vec<(i64, Vec<TestResult>)> = vec![];
 
     for s in results.clone().into_iter().map(|x| x.second).unique() {
-        let results_per_second: Vec<Result> = results
+        let results_per_second: Vec<TestResult> = results
             .clone()
             .into_iter()
             .filter(|x| x.second == s)
@@ -184,21 +185,25 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<(i64, Vec<Result>)> 
 
     log::info!("finished benchmark");
 
-    grouped_results
+    Ok(grouped_results)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::routes::{CreateTest, HttpMethods};
-    use httptest::{matchers::*, responders::*, Expectation, Server};
+    use httptest::{matchers::*, responders::*, Expectation, ServerPool};
+
+    // Create a server pool that will create at most 2 servers.
+    static SERVER_POOL: ServerPool = ServerPool::new(2);
 
     #[tokio::test]
     #[should_panic]
     async fn test_run_benchmark_empty_test() {
-        let server = Server::run();
+        let server = SERVER_POOL.get_server();
         server.expect(
             Expectation::matching(request::method_path("GET", "/foo"))
+                .times(1..)
                 .respond_with(status_code(200)),
         );
 
@@ -215,14 +220,15 @@ mod tests {
         };
 
         let results = run_benchmark(test).await;
-        assert!(results.is_empty());
+        assert!(results.unwrap().is_empty());
     }
 
     #[tokio::test]
     async fn test_run_benchmark_single_task() {
-        let server = Server::run();
+        let server = SERVER_POOL.get_server();
         server.expect(
             Expectation::matching(request::method_path("GET", "/foo"))
+                .times(1..)
                 .respond_with(status_code(200)),
         );
         let url = server.url("/foo");
@@ -237,7 +243,7 @@ mod tests {
             start_at: None,
         };
 
-        let results = run_benchmark(test).await;
+        let results = run_benchmark(test).await.unwrap();
         assert_eq!(results.len(), 1);
         let (second, result) = &results[0];
         assert_eq!(*second, 0);
@@ -246,9 +252,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_benchmark_single_task_many_seconds() {
-        let server = Server::run();
+        let server = SERVER_POOL.get_server();
         server.expect(
             Expectation::matching(request::method_path("GET", "/foo"))
+                .times(1..)
                 .respond_with(status_code(200)),
         );
         let url = server.url("/foo");
@@ -263,11 +270,11 @@ mod tests {
             start_at: None,
         };
 
-        let results = run_benchmark(test).await;
+        let results = run_benchmark(test).await.unwrap();
         assert_eq!(results.len(), 10);
         match &results.last() {
             Some((second, result)) => {
-                assert_eq!(*second, 10);
+                assert_eq!(*second, 9);
                 assert_eq!(result.len(), 1);
             }
             _ => panic!("Should have a result"),

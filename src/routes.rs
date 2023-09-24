@@ -1,6 +1,5 @@
 use actix_web::{get, post, web, HttpResponse, Responder};
 use chrono::NaiveDateTime;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
@@ -60,15 +59,29 @@ pub async fn create_test(
     };
 
     tokio::task::spawn(async move {
-        let benchmark_result = benchmark::run_benchmark(payload.0).await;
+        let benchmark_result = match benchmark::run_benchmark(payload.0).await {
+            Ok(b) => b,
+            Err(err) => {
+                log::error!("failed to run test: {:?}", err);
+                return match sqlx::query(
+                    "UPDATE tests SET status = 'FAILED', finished_at = CURRENT_TIMESTAMP WHERE id = $1",
+                )
+                .bind(&id)
+                .execute(pool.get_ref())
+                .await
+                {
+                    Err(err) => {
+                        log::error!("error inserting test_results: {:?}", err)
+                    }
+                    _ => {}
+                };
+            }
+        };
 
         for (sec, r) in benchmark_result {
             let total_requests: i64 = r.clone().into_iter().map(|x| x.requests).sum();
-            let avg_response_time: Vec<f64> = r
-                .clone()
-                .into_iter()
-                .map(|x| x.avg_response_time)
-                .collect_vec();
+            let avg_response_time: Vec<f64> =
+                r.clone().into_iter().map(|x| x.avg_response_time).collect();
 
             let media_avg_response_time = median(avg_response_time);
 
