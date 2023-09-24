@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS test_results (
   id VARCHAR(255) PRIMARY KEY,
   test_id VARCHAR(255),
   second NUMBER,
+  avg_response_time NUMBER,
   requests NUMBER,
   error_codes TEXT
 );

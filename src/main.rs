@@ -5,6 +5,7 @@ use simple_logger::SimpleLogger;
 mod benchmark;
 mod database;
 mod routes;
+mod utils;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> std::io::Result<()> {

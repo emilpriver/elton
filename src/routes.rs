@@ -6,8 +6,8 @@ use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 
 use crate::benchmark;
-use crate::benchmark::Result;
 use crate::database::{self, TestResultsRow};
+use crate::utils::median;
 
 #[derive(Clone, Copy, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "method", rename_all = "lowercase")]
@@ -62,25 +62,16 @@ pub async fn create_test(
     tokio::task::spawn(async move {
         let benchmark_result = benchmark::run_benchmark(payload.0).await;
 
-        let mut grouped_results: Vec<(i64, Vec<Result>)> = vec![];
-
-        for s in benchmark_result
-            .clone()
-            .into_iter()
-            .map(|x| x.second)
-            .unique()
-        {
-            let results_per_second: Vec<benchmark::Result> = benchmark_result
+        for (sec, r) in benchmark_result {
+            let total_requests: i64 = r.clone().into_iter().map(|x| x.requests).sum();
+            let avg_response_time: Vec<f64> = r
                 .clone()
                 .into_iter()
-                .filter(|x| x.second == s)
-                .collect();
+                .map(|x| x.avg_response_time)
+                .collect_vec();
 
-            grouped_results.push((s, results_per_second));
-        }
+            let media_avg_response_time = median(avg_response_time);
 
-        for (sec, r) in grouped_results {
-            let total_requests: i64 = r.clone().into_iter().map(|x| x.requests).sum();
             let error_codes: Vec<String> = r
                 .into_iter()
                 .flat_map(|x| x.error_codes)
@@ -90,13 +81,15 @@ pub async fn create_test(
             let test_id = Uuid::new_v4();
 
             match sqlx::query(
-                "INSERT INTO test_results(id, test_id, second, requests, error_codes) VALUES($1, $2, $3, $4, $5)",
+                "INSERT INTO test_results(id, test_id, second, requests, error_codes, avg_response_time) VALUES($1, $2, $3, $4, $5, $6)",
             )
             .bind(test_id.to_string())
             .bind(&id)
             .bind(sec)
             .bind(total_requests)
+            .bind(media_avg_response_time)
             .bind(error_codes.join(","))
+
             .execute(pool.get_ref())
             .await {
                 Err(err) => {
