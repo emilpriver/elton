@@ -191,12 +191,21 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Vec<(i64, Vec<Result>)> 
 mod tests {
     use super::*;
     use crate::routes::{CreateTest, HttpMethods};
+    use httptest::{matchers::*, responders::*, Expectation, Server};
 
     #[tokio::test]
     #[should_panic]
     async fn test_run_benchmark_empty_test() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/foo"))
+                .respond_with(status_code(200)),
+        );
+
+        let url = server.url("/foo");
+
         let test = CreateTest {
-            url: "https://example.com".to_string(),
+            url: url.to_string(),
             method: HttpMethods::GET,
             content_type: None,
             body: None,
@@ -211,8 +220,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_benchmark_single_task() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/foo"))
+                .respond_with(status_code(200)),
+        );
+        let url = server.url("/foo");
+
         let test = CreateTest {
-            url: "https://example.com".to_string(),
+            url: url.to_string(),
             method: HttpMethods::GET,
             content_type: None,
             body: None,
@@ -226,5 +242,35 @@ mod tests {
         let (second, result) = &results[0];
         assert_eq!(*second, 0);
         assert_eq!(result.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_run_benchmark_single_task_many_seconds() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/foo"))
+                .respond_with(status_code(200)),
+        );
+        let url = server.url("/foo");
+
+        let test = CreateTest {
+            url: url.to_string(),
+            method: HttpMethods::GET,
+            content_type: None,
+            body: None,
+            tasks: 1,
+            seconds: 10,
+            start_at: None,
+        };
+
+        let results = run_benchmark(test).await;
+        assert_eq!(results.len(), 10);
+        match &results.last() {
+            Some((second, result)) => {
+                assert_eq!(*second, 10);
+                assert_eq!(result.len(), 1);
+            }
+            _ => panic!("Should have a result"),
+        }
     }
 }
