@@ -33,4 +33,6 @@ pub struct TestResultsRow {
     pub second: i64,
     pub requests: i64,
     pub error_codes: String,
+    pub response_codes: String,
+    pub avg_response_time: i64,
 }

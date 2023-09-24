@@ -73,21 +73,32 @@ pub async fn create_test(
             let media_avg_response_time = median(avg_response_time);
 
             let error_codes: Vec<String> = r
+                .clone()
                 .into_iter()
                 .flat_map(|x| x.error_codes)
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>();
+
+            let response_codes: Vec<String> = r
+                .into_iter()
+                .flat_map(|x| x.response_codes)
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>();
 
             let test_id = Uuid::new_v4();
 
             match sqlx::query(
-                "INSERT INTO test_results(id, test_id, second, requests, error_codes, avg_response_time) VALUES($1, $2, $3, $4, $5, $6)",
+                "
+                INSERT INTO test_results(id, test_id, second, requests, error_codes, avg_response_time, response_codes) 
+                VALUES($1, $2, $3, $4, $5, $6, $7)
+                ",
             )
             .bind(test_id.to_string())
             .bind(&id)
             .bind(sec)
             .bind(total_requests)
             .bind(media_avg_response_time)
+            .bind(response_codes.join(","))
             .bind(error_codes.join(","))
 
             .execute(pool.get_ref())
@@ -145,7 +156,7 @@ pub async fn get_test(pool: web::Data<Pool<Sqlite>>, test_id: web::Path<String>)
     };
 
     let test_results: Vec<database::TestResultsRow> = match sqlx::query_as(
-        "SELECT id, test_id, second, requests, error_codes FROM test_results WHERE test_id = $1",
+        "SELECT id, test_id, second, requests, error_codes, response_codes, avg_response_time FROM test_results WHERE test_id = $1",
     )
     .bind(&test_id.as_str())
     .fetch_all(pool.get_ref())

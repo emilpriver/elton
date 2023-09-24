@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS test_results (
   avg_response_time NUMBER,
   requests NUMBER,
   error_codes TEXT
+  response_codes TEXT
 );
 
 
