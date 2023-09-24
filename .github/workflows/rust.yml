@@ -33,12 +33,14 @@ jobs:
       
       - name: Extract metadata (tags, labels) for Docker
         id: meta
+        if: github.ref == 'refs/heads/main'
         uses: docker/metadata-action@v5.0.0
         with:
           images: emilpriver/elton
       
       - name: Build and push Docker image
         uses: docker/build-push-action@v5.0.0
+        if: github.ref == 'refs/heads/main'
         with:
           context: .
           file: ./Dockerfile
