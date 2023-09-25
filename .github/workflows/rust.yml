@@ -38,7 +38,6 @@ jobs:
     matrix:
       version: [1.72.0]
       target: ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-pc-windows-gnu", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
-    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Check out the repo
