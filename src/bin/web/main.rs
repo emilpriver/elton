@@ -1,9 +1,12 @@
-use crate::database;
-use crate::routes::{create_test, get_test};
+extern crate modules;
+
 use actix_web::{web, App, HttpServer};
 use simple_logger::SimpleLogger;
 
-pub async fn run_web_app() {
+mod routes;
+
+#[tokio::main(flavor = "multi_thread")]
+pub async fn main() {
     match SimpleLogger::new()
         .with_level(log::LevelFilter::Info)
         .init()
@@ -14,15 +17,15 @@ pub async fn run_web_app() {
         _ => {}
     }
 
-    let connection = match database::setup().await {
+    let connection = match modules::database::setup().await {
         Ok(c) => c,
         Err(err) => panic!("failed to setup database: {:?}", err),
     };
 
     let server = match HttpServer::new(move || {
         App::new()
-            .service(get_test)
-            .service(create_test)
+            .service(routes::get_test)
+            .service(routes::create_test)
             .app_data(web::Data::new(connection.clone()))
     })
     .bind(("0.0.0.0", 3000))

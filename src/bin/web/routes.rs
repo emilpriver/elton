@@ -4,34 +4,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 
-use crate::benchmark;
-use crate::database::{self, TestResultsRow};
-use crate::utils::median;
-
-#[derive(Clone, Copy, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "method", rename_all = "lowercase")]
-pub enum HttpMethods {
-    POST,
-    GET,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-pub struct CreateTest {
-    pub method: HttpMethods,
-    pub tasks: u64,
-    pub seconds: u64,
-    pub start_at: Option<NaiveDateTime>,
-    pub url: String,
-    pub content_type: Option<String>,
-    pub body: Option<String>,
-}
-
-#[derive(Serialize, Clone, sqlx::FromRow)]
-pub struct Test {
-    pub id: String,
-    pub method: String,
-    pub url: String,
-}
+use modules::benchmark;
+use modules::database::{self, TestResultsRow};
+use modules::types::{CreateTest, HttpMethods, Test};
+use modules::utils::median;
 
 #[post("/")]
 pub async fn create_test(
