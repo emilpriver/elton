@@ -34,7 +34,7 @@ jobs:
 
   release:
     needs: [test]
-    name: Push Docker image to Docker Hub
+    name: Release
     runs-on: ubuntu-latest
     strategy:
       matrix:

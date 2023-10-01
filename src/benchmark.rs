@@ -266,16 +266,47 @@ mod tests {
             content_type: None,
             body: None,
             tasks: 1,
-            seconds: 10,
+            seconds: 5,
             start_at: None,
         };
 
         let results = run_benchmark(test).await.unwrap();
-        assert_eq!(results.len(), 10);
+        assert_eq!(results.len(), 5);
         match &results.last() {
             Some((second, result)) => {
-                assert_eq!(*second, 9);
+                assert_eq!(*second, 4);
                 assert_eq!(result.len(), 1);
+            }
+            _ => panic!("Should have a result"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_benchmark_many_tasks_many_seconds() {
+        let server = SERVER_POOL.get_server();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/foo"))
+                .times(10..)
+                .respond_with(status_code(200)),
+        );
+        let url = server.url("/foo");
+
+        let test = CreateTest {
+            url: url.to_string(),
+            method: HttpMethods::GET,
+            content_type: None,
+            body: None,
+            tasks: 10,
+            seconds: 5,
+            start_at: None,
+        };
+
+        let results = run_benchmark(test).await.unwrap();
+        assert_eq!(results.len(), 5);
+        match &results.last() {
+            Some((second, result)) => {
+                assert_eq!(*second, 4);
+                assert_eq!(result.len(), 10);
             }
             _ => panic!("Should have a result"),
         }
