@@ -1,11 +1,26 @@
 use chrono::NaiveDateTime;
+use core::fmt;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, clap::ValueEnum, sqlx::Type)]
 #[sqlx(type_name = "method", rename_all = "lowercase")]
 pub enum HttpMethods {
     POST,
     GET,
+}
+
+impl fmt::Display for HttpMethods {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HttpMethods::GET => write!(f, "GET"),
+            HttpMethods::POST => write!(f, "POST"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, clap::ValueEnum)]
+pub enum ContentType {
+    JSON,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -15,7 +30,7 @@ pub struct CreateTest {
     pub seconds: u64,
     pub start_at: Option<NaiveDateTime>,
     pub url: String,
-    pub content_type: Option<String>,
+    pub content_type: Option<ContentType>,
     pub body: Option<String>,
 }
 

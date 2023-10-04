@@ -1,12 +1,11 @@
 use actix_web::{get, post, web, HttpResponse, Responder};
-use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 
 use modules::benchmark;
 use modules::database::{self, TestResultsRow};
-use modules::types::{CreateTest, HttpMethods, Test};
+use modules::types::{ContentType, CreateTest};
 use modules::utils::median;
 
 #[post("/")]
@@ -16,13 +15,18 @@ pub async fn create_test(
 ) -> impl Responder {
     let id = Uuid::new_v4().to_string();
 
+    let content_type: Option<String> = match &payload.content_type {
+        Some(ContentType::JSON) => Some(String::from("application/json")),
+        None => None,
+    };
+
     let test: database::TestRow = match sqlx::query_as(
         "INSERT INTO tests(id, url, method, content_type, body) VALUES($1, $2, $3, $4, $5) RETURNING id, url, method, content_type, status, body, finished_at, created_at",
     )
     .bind(&id)
     .bind(&payload.url)
     .bind(&payload.method)
-    .bind(&payload.content_type)
+    .bind(content_type)
     .bind(&payload.body)
     .fetch_one(pool.get_ref())
     .await

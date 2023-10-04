@@ -1,4 +1,4 @@
-use crate::types::{CreateTest, HttpMethods, Test, TestResult};
+use crate::types::{ContentType, CreateTest, HttpMethods, Test, TestResult};
 use crate::utils::median;
 use anyhow::Result;
 use chrono::Utc;
@@ -56,7 +56,10 @@ pub async fn run_benchmark(test: CreateTest) -> Result<Vec<(i64, Vec<TestResult>
                     HttpMethods::POST => {
                         let mut req = Request::post(cloned_test.url.clone());
                         if let Some(c) = &cloned_test.content_type {
-                            req = req.header("Content-Type", c);
+                            let content_type = match c {
+                                ContentType::JSON => "application/json",
+                            };
+                            req = req.header("Content-Type", content_type);
                         }
 
                         let mut body = Body::empty();
