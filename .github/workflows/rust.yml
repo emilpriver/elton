@@ -8,19 +8,38 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
+    strategy:
+      matrix:
+        version: [1.72.0]
+        target: ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-pc-windows-gnu", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --verbose
+    - name: Install latest rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        target: "${{matrix.target}}"
+        toolchain: stable
+        default: true
+        override: true
+    - name: Run cargo check
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
     - name: Run tests
-      run: cargo test --verbose
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
 
   release:
-    needs: [build]
-    name: Push Docker image to Docker Hub
+    needs: [test]
+    name: Release
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: [1.72.0]
+        target: ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-pc-windows-gnu", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Check out the repo

@@ -1,3 +1,5 @@
+use crate::types::{ContentType, CreateTest, HttpMethods, Test, TestResult};
+use crate::utils::median;
 use anyhow::Result;
 use chrono::Utc;
 use hyper::{Body, Client, Request};
@@ -9,29 +11,7 @@ use tokio::{
     time::{sleep, Instant},
 };
 
-use crate::{
-    routes::{self, HttpMethods},
-    utils::median,
-};
-
-#[derive(Debug, Clone)]
-pub struct Test {
-    pub second: i64,
-    pub error_code: Option<String>,
-    pub response_code: u16,
-    pub response_time: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct TestResult {
-    pub second: i64,
-    pub error_codes: Vec<String>,
-    pub response_codes: Vec<u16>,
-    pub requests: i64,
-    pub avg_response_time: f64,
-}
-
-pub async fn run_benchmark(test: routes::CreateTest) -> Result<Vec<(i64, Vec<TestResult>)>> {
+pub async fn run_benchmark(test: CreateTest) -> Result<Vec<(i64, Vec<TestResult>)>> {
     log::info!(
         "Starting benchmark using {} tasks for {} seconds",
         test.tasks,
@@ -76,7 +56,10 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Result<Vec<(i64, Vec<Tes
                     HttpMethods::POST => {
                         let mut req = Request::post(cloned_test.url.clone());
                         if let Some(c) = &cloned_test.content_type {
-                            req = req.header("Content-Type", c);
+                            let content_type = match c {
+                                ContentType::JSON => "application/json",
+                            };
+                            req = req.header("Content-Type", content_type);
                         }
 
                         let mut body = Body::empty();
@@ -191,7 +174,7 @@ pub async fn run_benchmark(test: routes::CreateTest) -> Result<Vec<(i64, Vec<Tes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::routes::{CreateTest, HttpMethods};
+    use crate::types::{CreateTest, HttpMethods};
     use httptest::{matchers::*, responders::*, Expectation, ServerPool};
 
     // Create a server pool that will create at most 2 servers.
@@ -266,16 +249,47 @@ mod tests {
             content_type: None,
             body: None,
             tasks: 1,
-            seconds: 10,
+            seconds: 5,
             start_at: None,
         };
 
         let results = run_benchmark(test).await.unwrap();
-        assert_eq!(results.len(), 10);
+        assert_eq!(results.len(), 5);
         match &results.last() {
             Some((second, result)) => {
-                assert_eq!(*second, 9);
+                assert_eq!(*second, 4);
                 assert_eq!(result.len(), 1);
+            }
+            _ => panic!("Should have a result"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_benchmark_many_tasks_many_seconds() {
+        let server = SERVER_POOL.get_server();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/foo"))
+                .times(10..)
+                .respond_with(status_code(200)),
+        );
+        let url = server.url("/foo");
+
+        let test = CreateTest {
+            url: url.to_string(),
+            method: HttpMethods::GET,
+            content_type: None,
+            body: None,
+            tasks: 10,
+            seconds: 5,
+            start_at: None,
+        };
+
+        let results = run_benchmark(test).await.unwrap();
+        assert_eq!(results.len(), 5);
+        match &results.last() {
+            Some((second, result)) => {
+                assert_eq!(*second, 4);
+                assert_eq!(result.len(), 10);
             }
             _ => panic!("Should have a result"),
         }
